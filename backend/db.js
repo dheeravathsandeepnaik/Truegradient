@@ -46,6 +46,24 @@ async function init() {
     is_read INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
+  await run(`CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    role TEXT,
+    content TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  // Record payment orders and transactions for auditing and idempotency
+  await run(`CREATE TABLE IF NOT EXISTS payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    order_id TEXT UNIQUE,
+    payment_id TEXT UNIQUE,
+    amount INTEGER NOT NULL,
+    status TEXT CHECK(status IN ('created','paid','failed')) NOT NULL DEFAULT 'created',
+    signature TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
 
   const user = await get(`SELECT * FROM users WHERE username = ?`, ['testuser']);
   if (!user) {

@@ -6,6 +6,8 @@ import { init } from './db.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/user.js';
 import notifications from './routes/notifications.js';
+import chatRoutes from './routes/chat.js';
+import paymentRoutes from './routes/payment.js';
 
 dotenv.config();
 const app = express();
@@ -22,13 +24,10 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/notifications', notifications);
+app.use('/api/chat', chatRoutes);
+app.use('/api/payment', paymentRoutes);
 
 
-// simple chat stub
-app.post('/api/chat/send', (req, res) => {
-  const { message } = req.body;
-  res.json({ message: `Echo: ${message}`, createdAt: new Date() });
-});
 app.get('/', (req, res) => {
   res.send('Backend is running ');
 });
