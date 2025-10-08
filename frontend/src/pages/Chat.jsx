@@ -4,6 +4,8 @@ import { FiMessageSquare, FiPlus, FiChevronDown, FiChevronLeft, FiBell, FiUser, 
 import api from '../api/axios.js';
 import { useNavigate } from 'react-router-dom';
 import { logout } from '../features/auth/authSlice.js';
+import { fetchCredits as fetchCreditsThunk } from '../features/ui/uiSlice.js';
+import { getRazorpayKey, createOrder, verifyPayment } from '../api/payment.js';
 
 export default function Chat() {
   const [input, setInput] = useState('');
@@ -17,6 +19,7 @@ export default function Chat() {
   const user = useSelector((s) => s.auth.user);
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const storeCredits = useSelector((s) => s.ui.credits);
 
   const unreadCount = useMemo(() => notifications.filter((n) => !n.is_read).length, [notifications]);
 
@@ -92,6 +95,11 @@ export default function Chat() {
     // fetch on mount so badge shows right after sign-in
     fetchNotifications();
   }, []);
+
+  // Load initial credits from server into Redux (also updates TopBar display if used)
+  useEffect(() => {
+    dispatch(fetchCreditsThunk());
+  }, [dispatch]);
 
   useEffect(() => {
     if (isNotifOpen) fetchNotifications();
@@ -255,10 +263,61 @@ export default function Chat() {
           <h1 className="text-xl font-semibold">AI Chat</h1>
           <div className="flex items-center space-x-4">
             {/* Credits pill */}
-            <div className="hidden md:flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-full border border-blue-100 shadow-sm">
+            <div className="hidden md:flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-2 rounded-full border border-blue-100 shadow-sm">
               <FiRefreshCcw className="opacity-80" />
-              <span className="font-semibold">1,248</span>
+              <span className="font-semibold">{storeCredits}</span>
             </div>
+            <button
+              onClick={async () => {
+                try {
+                  // load Razorpay script if not available
+                  const ensureScript = () => new Promise((resolve, reject) => {
+                    if (window.Razorpay) return resolve();
+                    const s = document.createElement('script');
+                    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+                    s.onload = () => resolve();
+                    s.onerror = () => reject(new Error('Failed to load payment SDK'));
+                    document.body.appendChild(s);
+                  });
+                  await ensureScript();
+
+                  const amount = 100; // credits to add
+                  const key = await getRazorpayKey();
+                  const order = await createOrder(amount);
+
+                  const options = {
+                    key,
+                    amount: order.amount, // in paise
+                    currency: order.currency,
+                    name: 'TrueGradient',
+                    description: `Add ${amount} credits`,
+                    order_id: order.id,
+                    handler: async function (response) {
+                      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = response;
+                      const verify = await verifyPayment({
+                        order_id: razorpay_order_id,
+                        payment_id: razorpay_payment_id,
+                        signature: razorpay_signature,
+                        amount,
+                      });
+                      if (verify?.success) {
+                        // refresh credits
+                        dispatch(fetchCreditsThunk());
+                      }
+                    },
+                    theme: { color: '#2563eb' },
+                  };
+                  const rzp = new window.Razorpay(options);
+                  rzp.open();
+                } catch (e) {
+                  // optional: show toast
+                  console.error('Payment failed to initialize', e);
+                }
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-2 rounded-md shadow"
+            >
+              Add 100
+            </button>
             {/* Bell with embedded badge (restored) */}
             <div className="relative">
               <button
